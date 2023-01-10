@@ -1,5 +1,36 @@
-﻿#region DATA
-$basepath="D:\data"
+﻿#region DESCRIPTION
+<#
+$basepath = path to base folder where the data is stored
+$computerNameFilePath= filename wher the computer list is stored. Format is:
+TEMAT:ABC:RED
+COMPUTER1
+COMPUTER2
+COMPUTER3
+TEMAT:DEF:GREEN
+COMPUTER1
+COMPUTER2
+COMPUTER3
+TEMAT:GHI:BLUE
+COMPUTER1
+COMPUTER2
+COMPUTER3
+
+TEMAT: - heading which means that in that line is topic why the computerlist below is monitored
+ABC - reason why computer list below is monitored
+RED - color in excel
+
+$minutes= timespan of minutes between every computer scan
+$pathXLSX=result file
+$pathAttendance=result file which is refreshing every 3 minutes
+$startDate=startdate of monitoring
+$endDate=enddate of monitoring. It is time range which is use to monitor computer
+$computerList=list of computers. Datastructure used in script
+
+#>
+#endregion DESCRIPTION
+
+#region DATA
+$basepath="D:\data" 
 $computerNameFilePath=Join-Path -Path $basePath -ChildPath "computers.txt"
 $minutes=3
 $pathXLSX=Join-Path -Path $basePath -ChildPath "$(Get-Date -Format "dd.MM.yyyy").xlsx"
@@ -124,8 +155,9 @@ function Get-ExcelTranslateFromR1C1
     $range = [OfficeOpenXml.ExcelAddress]::TranslateFromR1C1("R[$rowNumber]C[$columnNumber]", 0, 0)
     return $range
 }
+#endregion Functions
 
-
+#region Script
 $computerList.AddRange($(Get-ComputerObject -FilePath $computerNameFilePath))
 
 while($startDate -lt $endDate)
@@ -154,7 +186,7 @@ foreach($computerObject in $computerList)
     }
 }
 
-#TODO: Zmienić ścieżkę
+#TODO: Change Path
 $output=$($computerList | Format-Table -GroupBy TOPIC -Property COMPUTERNAME,TOPIC,"*.*" -Wrap)
 $output>> $pathAttendance #FILE
 $output | fl * #TERMINAL
@@ -164,35 +196,35 @@ Start-Sleep -Seconds $($minutes*60)
 $startDate=$(Get-Date)
 }
 
-#Wypisanie danych na terminal
+#export data into excel
 $excelHandler=$computerList | Export-Excel -Path $pathXLSX -PassThru -AutoSize
 
 $ws = $excelHandler.Workbook.Worksheets["Sheet1"]
 $lastRow=$ws.Dimension.End.Row
 $lastDataColumn=$ws.Dimension.End.Column
 
-#wykonanie naglowkow górnej tabeli
+#create headings in excel
 Set-ExcelRange -Address $ws.Cells["$(Get-ExcelTranslateFromR1C1 -Row 1 -Column ($lastDataColumn+1))"] -Value "LOGGED"
 Set-ExcelRange -Address $ws.Cells["$(Get-ExcelTranslateFromR1C1 -Row 1 -Column ($lastDataColumn+2))"] -Value "NOLOGGED"
 Set-ExcelRange -Address $ws.Cells["$(Get-ExcelTranslateFromR1C1 -Row 1 -Column ($lastDataColumn+3))"] -Value "COMPUTER USED"
 
-#wykonanie naglowkow dolnej tabeli
+#create headings in excel
 Set-ExcelRange -Address $ws.Cells["A$($lastRow+6):B$($lastRow+6)"] -Value $ws.Cells["A1:B1"].Value
 Set-ExcelRange -Address $ws.Cells["D$($lastRow+6):F$($lastRow+6)"] -Value $ws.Cells["$(Get-ExcelTranslateFromR1C1 -Row 1 -Column ($lastDataColumn+1)):$(Get-ExcelTranslateFromR1C1 -Row 1 -Column ($lastDataColumn+3))"].Value
 
 
 
 2..$lastRow | Foreach-Object {
-    #kolorowanie pierwszych 2 kolumn
+    #color first 2 columns
     Set-ExcelRange -Address $ws.Cells["A$($_):B$($_)"] -BackgroundColor $($ws.Cells["C$($_)"].Value)
     
-    #wypełnianie ostatnich kolumn z zajetoscia stacji
+    #columns in table which is used if user is on station/is not logged/not connected
     $dataRowRangeSecondCoordinate=$(Get-ExcelTranslateFromR1C1 -Row $($_) -Column $lastDataColumn)
     Set-ExcelRange -Address $ws.Cells["$(Get-ExcelTranslateFromR1C1 -Row $($_) -Column ($lastDataColumn+1))"] -Formula "=COUNTIF(D$($_):$dataRowRangeSecondCoordinate,`"*.*`")" -NumberFormat 'General'
     Set-ExcelRange -Address $ws.Cells["$(Get-ExcelTranslateFromR1C1 -Row $($_) -Column ($lastDataColumn+2))"] -Formula "=COUNTIF(D$($_):$dataRowRangeSecondCoordinate,`"<>*.*`")" -NumberFormat 'General'
     Set-ExcelRange -Address $ws.Cells["$(Get-ExcelTranslateFromR1C1 -Row $($_) -Column ($lastDataColumn+3))"] -Formula "=($(Get-ExcelTranslateFromR1C1 -Row $($_) -Column ($lastDataColumn+1)))/(($(Get-ExcelTranslateFromR1C1 -Row $($_) -Column ($lastDataColumn+1)))+($(Get-ExcelTranslateFromR1C1 -Row $($_) -Column ($lastDataColumn+2))))" -NumberFormat 'Percentage'
 
-    #kolorowanie pierwszych 2 kolumn wraz ze wstawieniem wartości-poniżej
+    #colors first two columns with values
     Set-ExcelRange -Address $ws.Cells["A$($lastRow+$($_)+5):B$($lastRow+$($_)+5)"] -BackgroundColor $($ws.Cells["C$($_)"].Value) -Value $ws.Cells["A$($_):B$($_)"].Value
     Set-ExcelRange -Address $ws.Cells["D$($lastRow+$($_)+5)"] -Formula "=COUNTIF(D$($_):$dataRowRangeSecondCoordinate,`"*.*`")" -NumberFormat 'General'
     Set-ExcelRange -Address $ws.Cells["E$($lastRow+$($_)+5)"] -Formula "=COUNTIF(D$($_):$dataRowRangeSecondCoordinate,`"<>*.*`")" -NumberFormat 'General'
@@ -200,9 +232,8 @@ Set-ExcelRange -Address $ws.Cells["D$($lastRow+6):F$($lastRow+6)"] -Value $ws.Ce
 }
 
 
-#Tworzenie wykresów
-#TODO:Dostylizować wykresy poprzez nadanie im etykiet danych
-#zakresy
+#creating charts
+#ranges
 $computersColumnRange="$(Get-ExcelTranslateFromR1C1 -Row 2 -Column 1):$(Get-ExcelTranslateFromR1C1 -Row $lastRow -Column 1)"
 $loggedColumnRange="$(Get-ExcelTranslateFromR1C1 -Row 2 -Column ($lastDataColumn)):$(Get-ExcelTranslateFromR1C1 -Row $lastRow -Column ($lastDataColumn))"
 $unloggedColumnRange="$(Get-ExcelTranslateFromR1C1 -Row 2 -Column ($lastDataColumn+1)):$(Get-ExcelTranslateFromR1C1 -Row $lastRow -Column ($lastDataColumn+1))"
@@ -211,7 +242,7 @@ $usageColumnPercentRange="$(Get-ExcelTranslateFromR1C1 -Row 2 -Column ($lastData
 Add-ExcelChart -Worksheet $ws -ChartType ColumnClustered  -XRange $computersColumnRange -YRange $usageColumnPercentRange -Title "COMPUTER USAGE PERCENT" -XAxisTitleText "Procenty" -YMinValue 0 -YMaxValue 1.0 -YAxisTitleText "Komputery" -Width 1000 -Height 500 -LegendPosition Bottom -SeriesHeader "COMPUTER USAGE PERCENT" -Row $($lastRow+3) -Column 5
 Add-ExcelChart -Worksheet $ws -ChartType ColumnStacked -XRange $computersColumnRange -YRange $loggedColumnRange,$unloggedColumnRange -Title "LOGGED IN PERCENT AND NO LOGGED IN PERCENT" -XAxisTitleText "Procenty" -YAxisTitleText "Komputery" -Width 1000 -Height 500 -LegendPosition Bottom -SeriesHeader "LOGGED","NO LOGGED" -Row $($lastRow+3) -Column 12
 
-#kolorowanie logowań
+#colour of logged in
 Add-ConditionalFormatting -Address "C2:$(Get-ExcelTranslateFromR1C1 -Row $lastRow -Column $lastDataColumn)" -Worksheet $ws -RuleType ContainsText -ConditionValue "NO USER" -BackgroundColor "RED"
 Add-ConditionalFormatting -Address "C2:$(Get-ExcelTranslateFromR1C1 -Row $lastRow -Column $lastDataColumn)" -Worksheet $ws -RuleType ContainsText -ConditionValue "NO CONNECTION" -BackgroundColor "BLUE"
 Add-ConditionalFormatting -Address "C2:$(Get-ExcelTranslateFromR1C1 -Row $lastRow -Column $lastDataColumn)" -Worksheet $ws -RuleType ContainsText -ConditionValue "*.*" -BackgroundColor "GREEN"
@@ -220,3 +251,4 @@ $ws.DeleteColumn(3)
 
 Close-ExcelPackage -Show $excelHandler
 
+#endregion Script
